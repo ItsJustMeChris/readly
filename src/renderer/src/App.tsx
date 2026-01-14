@@ -405,7 +405,7 @@ function App() {
               } ${draggedNoteId === note.id ? 'opacity-40 scale-[0.98]' : ''}`}
             >
               <span
-                className={`text-[13px] font-medium truncate pr-6 ${activeNoteId === note.id ? 'text-indigo-300' : 'text-white/70'}`}
+                className={`text-[13px] font-medium truncate pr-6 ${activeNoteId === note.id ? 'text-white' : 'text-white/70'}`}
               >
                 {getFirstLine(note.content) || 'Untitled'}
               </span>
