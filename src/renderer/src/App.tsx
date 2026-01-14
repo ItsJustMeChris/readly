@@ -81,27 +81,9 @@ function calculateWordDelay(word: string, options: AdaptiveOptions): number {
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [notes, setNotes] = useState<Note[]>([
-    {
-      id: '1',
-      title: 'Welcome to Readly',
-      content:
-        'Readly is a modern speed-reading environment designed for maximum retention. By using the Optimal Recognition Point technique, we highlight the character your eye naturally focuses on for fastest word recognition. This helps you read faster while maintaining comprehension. Try pasting an article or book chapter to experience rapid serial visual presentation at its finest.'
-    },
-    {
-      id: '2',
-      title: 'Chapter 1: The Signal',
-      content:
-        'The first signal arrived at 3:47 AM on a Tuesday, buried in the background radiation of a dying star. Dr. Elena Vasquez almost missed it. She had been running the same deep-space monitoring routine for eleven years, watching the same empty quadrant of sky, logging the same cosmic silence. But tonight, something was different. The waveform on her screen pulsed with an unmistakable rhythm. Not random. Not natural. Structured. She reached for her coffee with trembling hands, knocking it across her keyboard. She barely noticed. In forty years of SETI research, humanity had never received a verified extraterrestrial signal. Now she was staring at one, alone in a basement laboratory in New Mexico, while the rest of the world slept. The signal repeated every 73 seconds, a prime number that ruled out any natural phenomenon. Within its carrier wave, she detected layers of embedded data, compressed information dense enough to fill libraries. Her first instinct was to call Director Morrison. Her second instinct, the one she followed, was to keep listening. The signal was changing. Adapting. As if it knew someone was finally paying attention. Three hours later, when the sun rose over the desert, Elena had decoded the first fragment. It was a warning.'
-    },
-    {
-      id: '3',
-      title: 'Chapter 2: The Awakening',
-      content:
-        'Commander Jin Park had been in cryosleep for 847 years when the ship decided to wake him. The Meridian was an ark, built to carry twelve thousand colonists across the void between stars. Jin was not a colonist. He was a failsafe, one of six military officers frozen in a separate bay, to be revived only if something went catastrophically wrong. The revival chamber hissed as it equalized pressure. Jin gasped, lungs burning with recycled air that tasted like copper and regret. Emergency lights painted everything in shades of red. A synthetic voice spoke calmly in his ear. "Commander Park, you have been revived due to Protocol Seven. Ship integrity is at 34 percent. Crew casualties exceed acceptable parameters. Please report to the bridge." Jin pulled himself from the pod, muscles screaming after nearly a millennium of stillness. The corridor outside was damaged, hull panels buckled inward, scorch marks climbing the walls like black ivy. He found the first body twenty meters from his chamber. Then another. Then dozens more. Whatever had happened to the Meridian, it had happened fast, and it had been violent. On the bridge, he discovered the truth. The navigation display showed their position, impossibly far from their plotted course. They had not drifted. They had been moved. Taken. And through the main viewport, hanging in the darkness like a wound in space itself, Jin saw what had taken them. It was alive. It was waiting. And it was older than the stars.'
-    }
-  ])
-  const [activeNoteId, setActiveNoteId] = useState<string>('1')
+  const [notes, setNotes] = useState<Note[]>([])
+  const [activeNoteId, setActiveNoteId] = useState<string>('')
+  const [isLoaded, setIsLoaded] = useState(false)
   const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null)
 
   // Reader state
@@ -124,6 +106,74 @@ function App() {
   const startWpmRef = useRef(wpm)
 
   const activeNote = notes.find((n) => n.id === activeNoteId)
+
+  // Load notes and settings on mount
+  useEffect(() => {
+    const loadData = async () => {
+      // Check if API is available
+      if (!window.api || typeof window.api.loadNotes !== 'function') {
+        console.error('window.api not available:', window.api)
+        setIsLoaded(true)
+        return
+      }
+
+      try {
+        const savedNotes = await window.api.loadNotes()
+        const savedSettings = await window.api.loadSettings()
+
+        if (savedNotes && savedNotes.length > 0) {
+          setNotes(savedNotes)
+          setActiveNoteId(savedNotes[0].id)
+        }
+
+        // Apply saved settings if available
+        if (savedSettings) {
+          setWpm(savedSettings.wpm)
+          setAdaptWordLength(savedSettings.adaptWordLength)
+          setAdaptPunctuation(savedSettings.adaptPunctuation)
+          setAdaptComplexity(savedSettings.adaptComplexity)
+          setTrainingMode(savedSettings.trainingMode)
+        }
+      } catch (error) {
+        console.error('Failed to load data:', error)
+      }
+      setIsLoaded(true)
+    }
+    loadData()
+  }, [])
+
+  // Save notes when they change (debounced)
+  const isInitialMount = useRef(true)
+  useEffect(() => {
+    if (!isLoaded || !window.api?.saveNotes) return
+    // Skip saving on initial load
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+    const timeoutId = setTimeout(() => {
+      console.log('Saving notes to disk...')
+      window.api.saveNotes(notes).then(() => {
+        console.log('Notes saved!')
+      })
+    }, 500)
+    return () => clearTimeout(timeoutId)
+  }, [notes, isLoaded])
+
+  // Save settings when they change
+  useEffect(() => {
+    if (!isLoaded || !window.api?.saveSettings) return
+    const timeoutId = setTimeout(() => {
+      window.api.saveSettings({
+        wpm,
+        adaptWordLength,
+        adaptPunctuation,
+        adaptComplexity,
+        trainingMode
+      })
+    }, 500)
+    return () => clearTimeout(timeoutId)
+  }, [wpm, adaptWordLength, adaptPunctuation, adaptComplexity, trainingMode, isLoaded])
 
   const createNote = () => {
     const newNote: Note = {
@@ -274,7 +324,31 @@ function App() {
 
   const currentWord = words[currentIdx] || ''
   const orp = getORP(currentWord)
-  const progress = words.length > 0 ? ((currentIdx + 1) / words.length) * 100 : 0
+
+  // Show loading state
+  if (!isLoaded) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-black text-white">
+        <div className="text-white/40 text-sm">Loading notes...</div>
+      </div>
+    )
+  }
+
+  // Debug: show if no notes loaded
+  if (notes.length === 0) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-black text-white gap-4">
+        <div className="text-white/60 text-sm">No notes found</div>
+        <div className="text-white/30 text-xs">API available: {window.api ? 'yes' : 'no'}</div>
+        <button
+          onClick={createNote}
+          className="px-4 py-2 bg-indigo-500 rounded-lg text-sm"
+        >
+          Create first note
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="h-screen flex bg-black text-white overflow-hidden select-none">
