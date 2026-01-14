@@ -1,4 +1,12 @@
-# readly
+# Readly
+
+A beautiful speed reading app with training modes and note-taking capabilities.
+
+## Demo
+
+https://github.com/user-attachments/assets/f6625f00-6361-4d4c-8e43-6975bdb5c199
+
+## Getting Started
 
 To install dependencies:
 
