@@ -7,6 +7,7 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
 import { marked } from 'marked'
 import TurndownService from 'turndown'
+import { CollapsibleHeading } from '../extensions/CollapsibleHeading'
 
 // Create lowlight instance with common languages
 const lowlight = createLowlight(common)
@@ -69,10 +70,11 @@ function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorProps) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: {
-          levels: [1, 2, 3, 4, 5, 6],
-        },
+        heading: false, // Disable default heading, use CollapsibleHeading instead
         codeBlock: false,
+      }),
+      CollapsibleHeading.configure({
+        levels: [1, 2, 3, 4, 5, 6],
       }),
       Placeholder.configure({
         placeholder: placeholder || 'Start writing...',

@@ -1093,6 +1093,62 @@ input[type="range"]::-moz-range-thumb {
   margin-top: 0;
 }
 
+/* Collapsible headings */
+.tiptap-wrapper .tiptap .collapsible-heading-wrapper {
+  display: block;
+}
+
+.tiptap-wrapper .tiptap .collapsible-heading {
+  display: block;
+}
+
+.tiptap-wrapper .tiptap .collapsible-heading .collapse-toggle {
+  cursor: pointer;
+  user-select: none;
+  margin-right: 0.4em;
+  font-size: 0.65em;
+  color: var(--text-muted);
+  opacity: 0.5;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  vertical-align: middle;
+  position: relative;
+  top: -0.1em;
+}
+
+.tiptap-wrapper .tiptap .collapsible-heading:hover .collapse-toggle {
+  opacity: 1;
+}
+
+.tiptap-wrapper .tiptap .collapsible-heading .collapse-toggle:hover {
+  color: var(--accent);
+}
+
+/* Force heading-content and its children inline */
+.tiptap-wrapper .tiptap .collapsible-heading .heading-content {
+  display: inline;
+}
+
+.tiptap-wrapper .tiptap .collapsible-heading .heading-content * {
+  display: inline;
+}
+
+/* Show toggle when collapsed */
+.tiptap-wrapper .tiptap .collapsible-heading-wrapper[data-collapsed="true"] .collapse-toggle {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.tiptap-wrapper .tiptap .collapsible-heading .collapsed-indicator {
+  color: var(--text-muted);
+  margin-left: 0.3em;
+  opacity: 0.6;
+}
+
+/* Hide collapsed content */
+.tiptap-wrapper .tiptap .collapsed-content {
+  display: none;
+}
+
 /* Paragraphs - no spacing like Bear */
 .tiptap-wrapper .tiptap p {
   margin: 0;
