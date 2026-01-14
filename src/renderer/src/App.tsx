@@ -1,4 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import {
+  Plus,
+  FolderPlus,
+  ChevronDown,
+  Folder,
+  X,
+  Trash2,
+  RotateCcw,
+  PanelLeft,
+  Play,
+  Pause,
+  Settings,
+  Sun,
+  Check
+} from 'lucide-react'
 import MarkdownEditor from './components/MarkdownEditor'
 
 // Helper to strip HTML tags and get plain text (preserves block element separation)
@@ -615,10 +630,7 @@ function App() {
               onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
               title="New Note"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
+              <Plus size={14} strokeWidth={2.5} />
             </button>
             <button
               onClick={() => createFolder()}
@@ -628,11 +640,7 @@ function App() {
               onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
               title="New Folder"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                <line x1="12" y1="11" x2="12" y2="17" />
-                <line x1="9" y1="14" x2="15" y2="14" />
-              </svg>
+              <FolderPlus size={14} strokeWidth={2} />
             </button>
           </div>
         </div>
@@ -687,14 +695,10 @@ function App() {
                           className="p-0.5 rounded transition-transform duration-200"
                           style={{ color: 'var(--text-muted)', transform: folder.collapsed ? 'rotate(-90deg)' : undefined }}
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="6 9 12 15 18 9" />
-                          </svg>
+                          <ChevronDown size={12} strokeWidth={2} />
                         </button>
                         {/* Folder icon */}
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
-                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                        </svg>
+                        <Folder size={14} strokeWidth={1.5} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                         {/* Folder name - editable */}
                         {editingFolderId === folder.id ? (
                           <input
@@ -735,10 +739,7 @@ function App() {
                           onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
                           title="Add note"
                         >
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <line x1="12" y1="5" x2="12" y2="19" />
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                          </svg>
+                          <Plus size={10} strokeWidth={2.5} />
                         </button>
                         {/* Add subfolder button */}
                         <button
@@ -749,11 +750,7 @@ function App() {
                           onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
                           title="Add subfolder"
                         >
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                            <line x1="12" y1="11" x2="12" y2="17" />
-                            <line x1="9" y1="14" x2="15" y2="14" />
-                          </svg>
+                          <FolderPlus size={10} strokeWidth={2} />
                         </button>
                         {/* Delete button */}
                         <button
@@ -764,10 +761,7 @@ function App() {
                           onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
                           title="Delete folder"
                         >
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
+                          <X size={10} strokeWidth={2.5} />
                         </button>
                       </div>
                       {/* Folder children */}
@@ -819,10 +813,7 @@ function App() {
                         onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
                       >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
+                        <X size={12} strokeWidth={2.5} />
                       </button>
                     </div>
                   ))}
@@ -867,23 +858,14 @@ function App() {
                     className="p-0.5 rounded transition-all duration-150"
                     style={{ color: 'var(--text-muted)' }}
                   >
-                    <svg
-                      width="10"
-                      height="10"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
+                    <ChevronDown
+                      size={10}
+                      strokeWidth={2.5}
                       style={{ transform: trashCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}
-                    >
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
+                    />
                   </button>
                   {/* Trash icon */}
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
+                  <Trash2 size={14} strokeWidth={1.5} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                   <span className="flex-1 text-[13px] font-medium" style={{ color: 'var(--text-secondary)' }}>
                     Trash
                   </span>
@@ -899,10 +881,7 @@ function App() {
                     onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
                     title="Empty trash"
                   >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
+                    <X size={10} strokeWidth={2.5} />
                   </button>
                 </div>
                 {/* Trash contents */}
@@ -946,10 +925,7 @@ function App() {
                           onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
                           title="Restore"
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                            <path d="M3 3v5h5" />
-                          </svg>
+                          <RotateCcw size={12} strokeWidth={2} />
                         </button>
                         {/* Delete permanently button */}
                         <button
@@ -960,10 +936,7 @@ function App() {
                           onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
                           title="Delete permanently"
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                          </svg>
+                          <Trash2 size={12} strokeWidth={2.5} />
                         </button>
                       </div>
                     ))}
@@ -985,10 +958,7 @@ function App() {
               onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
               title="Theme"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-              </svg>
+              <Sun size={14} strokeWidth={2} />
             </button>
             {/* Theme selector dropdown */}
             {themeMenuOpen && (() => {
@@ -1060,9 +1030,7 @@ function App() {
                     <span className="text-[13px] font-medium flex items-center gap-2">
                       {t.name}
                       {theme === t.id && (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
+                        <Check size={12} strokeWidth={3} />
                       )}
                     </span>
                     <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t.description}</span>
@@ -1092,10 +1060,7 @@ function App() {
               onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
               title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-                <rect x="3" y="3" width="18" height="18" rx="3" />
-                <line x1="9" y1="3" x2="9" y2="21" />
-              </svg>
+              <PanelLeft size={16} strokeWidth={1.75} />
             </button>
           </div>
 
@@ -1153,10 +1118,7 @@ function App() {
                 onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
                 title="Close reader"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+                <X size={16} strokeWidth={2} />
               </button>
             </div>
           </nav>
@@ -1225,14 +1187,9 @@ function App() {
                 style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}
               >
                 {isPlaying ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="6" y="4" width="4" height="16" rx="1" />
-                    <rect x="14" y="4" width="4" height="16" rx="1" />
-                  </svg>
+                  <Pause size={14} fill="currentColor" />
                 ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
+                  <Play size={14} fill="currentColor" />
                 )}
               </button>
 
@@ -1280,10 +1237,7 @@ function App() {
                 onMouseLeave={(e) => { if (!settingsOpen) { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' } }}
                 title="Adaptive settings"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
+                <Settings size={14} strokeWidth={2} />
               </button>
             </div>
 
