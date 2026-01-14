@@ -18,6 +18,12 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^3.0.0",
+    "@tiptap/extension-code-block-lowlight": "^3.15.3",
+    "@tiptap/extension-placeholder": "^3.15.3",
+    "@tiptap/extension-typography": "^3.15.3",
+    "@tiptap/react": "^3.15.3",
+    "@tiptap/starter-kit": "^3.15.3",
+    "lowlight": "^3.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

@@ -1,4 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import MarkdownEditor from './components/MarkdownEditor'
+
+// Helper to strip HTML tags and get plain text (preserves block element separation)
+function stripHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  // Add newlines after block elements to preserve visual separation
+  const blockElements = doc.body.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, br, div')
+  blockElements.forEach(el => {
+    el.appendChild(document.createTextNode('\n'))
+  })
+  return doc.body.textContent || ''
+}
+
+// Get the first line of content as the title
+function getFirstLine(html: string): string {
+  const text = stripHtml(html).trim()
+  const firstLine = text.split('\n')[0]?.trim() || ''
+  return firstLine.slice(0, 100) // Limit length
+}
 
 interface Note {
   id: string
@@ -221,7 +240,10 @@ function App() {
   // Reader functions
   const openReader = () => {
     if (!activeNote?.content.trim()) return
-    const wordList = activeNote.content.trim().split(/\s+/)
+    // Strip HTML tags to get plain text for the reader
+    const plainText = stripHtml(activeNote.content)
+    if (!plainText.trim()) return
+    const wordList = plainText.trim().split(/\s+/)
     setWords(wordList)
     setCurrentIdx(0)
     setReaderOpen(true)
@@ -385,11 +407,15 @@ function App() {
               <span
                 className={`text-[13px] font-medium truncate pr-6 ${activeNoteId === note.id ? 'text-indigo-300' : 'text-white/70'}`}
               >
-                {note.title || 'Untitled'}
+                {getFirstLine(note.content) || 'Untitled'}
               </span>
               <span className="text-[12px] text-white/35 truncate leading-relaxed">
-                {note.content.slice(0, 60) || 'Empty note'}
-                {note.content.length > 60 ? '…' : ''}
+                {(() => {
+                  const text = stripHtml(note.content).trim()
+                  const lines = text.split('\n').filter(l => l.trim())
+                  const preview = lines.slice(1).join(' ').trim() || (lines[0] ? '' : 'Empty note')
+                  return preview.slice(0, 60) + (preview.length > 60 ? '…' : '')
+                })()}
               </span>
               <button
                 onClick={(e) => {
@@ -443,13 +469,13 @@ function App() {
           </div>
 
           <h1 className="absolute left-1/2 -translate-x-1/2 text-[13px] font-medium text-white/40 tracking-tight">
-            {activeNote?.title || 'Readly'}
+            {(activeNote && getFirstLine(activeNote.content)) || 'Readly'}
           </h1>
 
           <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
             <button
               onClick={openReader}
-              disabled={!activeNote?.content.trim()}
+              disabled={!activeNote?.content.trim() || !stripHtml(activeNote?.content || '').trim()}
               className="px-3.5 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-[13px] font-medium shadow-lg shadow-indigo-500/20 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-indigo-500 transition-all duration-200 cursor-pointer outline-none"
             >
               Reader
@@ -461,18 +487,11 @@ function App() {
         <main className="flex-1 flex flex-col overflow-hidden">
           {activeNote ? (
             <div className="flex-1 flex flex-col max-w-3xl w-full mx-auto px-8 py-10 overflow-y-auto">
-              <input
-                type="text"
-                value={activeNote.title}
-                onChange={(e) => updateNote(activeNote.id, { title: e.target.value })}
-                placeholder="Untitled"
-                className="text-3xl font-semibold bg-transparent border-none outline-none mb-4 text-white placeholder-white/20 tracking-tight"
-              />
-              <textarea
+              <MarkdownEditor
+                key={activeNote.id}
                 value={activeNote.content}
-                onChange={(e) => updateNote(activeNote.id, { content: e.target.value })}
+                onChange={(content) => updateNote(activeNote.id, { content })}
                 placeholder="Start writing or paste your text here…"
-                className="flex-1 text-[16px] leading-[1.85] bg-transparent border-none outline-none resize-none text-white/70 placeholder-white/25"
               />
             </div>
           ) : (
@@ -516,7 +535,7 @@ function App() {
             <div className="w-10" /> {/* Spacer for centering */}
 
             <span className="text-[13px] font-medium text-white/40 tracking-tight">
-              {activeNote?.title || 'Reader'}
+              {(activeNote && getFirstLine(activeNote.content)) || 'Reader'}
             </span>
 
             <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
