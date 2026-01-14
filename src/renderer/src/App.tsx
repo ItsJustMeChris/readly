@@ -98,12 +98,53 @@ function calculateWordDelay(word: string, options: AdaptiveOptions): number {
   return delay
 }
 
+// Theme definitions (open source themes only)
+const themes = [
+  { id: 'default', name: 'Midnight', description: 'Deep black with indigo accents' },
+  { id: 'high-contrast', name: 'High Contrast', description: 'Maximum readability' },
+  { id: 'charcoal', name: 'Charcoal', description: 'Soft charcoal grays' },
+  { id: 'solarized-light', name: 'Solarized Light', description: 'Precision colors for light background' },
+  { id: 'solarized-dark', name: 'Solarized Dark', description: 'Precision colors for dark background' },
+  { id: 'gotham', name: 'Gotham', description: 'Dark city vibes' },
+  { id: 'dracula', name: 'Dracula', description: 'Dark theme with vibrant colors' },
+  { id: 'cobalt', name: 'Cobalt', description: 'Deep blue elegance' },
+  { id: 'duotone-light', name: 'Duotone Light', description: 'Two-tone light palette' },
+  { id: 'duotone-snow', name: 'Duotone Snow', description: 'Crisp winter whites' },
+  { id: 'duotone-heat', name: 'Duotone Heat', description: 'Warm sunset tones' },
+  { id: 'ayu', name: 'Ayu', description: 'Warm dark theme' },
+  { id: 'ayu-mirage', name: 'Ayu Mirage', description: 'Muted dark blue palette' },
+  { id: 'nord-light', name: 'Nord Light', description: 'Arctic light palette' },
+  { id: 'nord', name: 'Nord', description: 'Arctic, north-bluish palette' },
+  { id: 'lighthaus', name: 'Lighthaus', description: 'Focused dark theme' },
+  { id: 'rose-pine', name: 'Rosé Pine', description: 'Soho vibes, dark' },
+  { id: 'rose-pine-dawn', name: 'Rosé Pine Dawn', description: 'Soho vibes, light' },
+  { id: 'tokyo-night', name: 'Tokyo Night', description: 'Neon city nights' },
+  { id: 'tokyo-night-light', name: 'Tokyo Night Light', description: 'Bright Tokyo morning' },
+  { id: 'atom', name: 'Atom', description: 'Classic editor dark' },
+  { id: 'one-dark', name: 'One Dark', description: 'Atom One Dark theme' },
+  { id: 'gruvbox', name: 'Gruvbox', description: 'Retro groove colors' },
+  { id: 'catppuccin-latte', name: 'Catppuccin Latte', description: 'Soothing pastel light' },
+  { id: 'catppuccin-macchiato', name: 'Catppuccin Macchiato', description: 'Soothing pastel dark' },
+  { id: 'everforest-dark', name: 'Everforest Dark', description: 'Forest greens, dark' },
+  { id: 'everforest-light', name: 'Everforest Light', description: 'Forest greens, light' },
+] as const
+
+type ThemeId = typeof themes[number]['id']
+
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [notes, setNotes] = useState<Note[]>([])
   const [activeNoteId, setActiveNoteId] = useState<string>('')
   const [isLoaded, setIsLoaded] = useState(false)
   const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null)
+
+  // Theme state
+  const [theme, setTheme] = useState<ThemeId>('default')
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+  const [themeSearch, setThemeSearch] = useState('')
+  const [themeHighlightIndex, setThemeHighlightIndex] = useState(0)
+  const themeMenuRef = useRef<HTMLDivElement>(null)
+  const themeListRef = useRef<HTMLDivElement>(null)
 
   // Reader state
   const [readerOpen, setReaderOpen] = useState(false)
@@ -123,6 +164,15 @@ function App() {
   const [trainingMode, setTrainingMode] = useState(false)
   const [trainingIncrement] = useState(10) // WPM increase per 50 words
   const startWpmRef = useRef(wpm)
+
+  // Apply theme to document
+  useEffect(() => {
+    if (theme === 'default') {
+      document.documentElement.removeAttribute('data-theme')
+    } else {
+      document.documentElement.setAttribute('data-theme', theme)
+    }
+  }, [theme])
 
   const activeNote = notes.find((n) => n.id === activeNoteId)
 
@@ -152,6 +202,7 @@ function App() {
           setAdaptPunctuation(savedSettings.adaptPunctuation)
           setAdaptComplexity(savedSettings.adaptComplexity)
           setTrainingMode(savedSettings.trainingMode)
+          if (savedSettings.theme) setTheme(savedSettings.theme)
         }
       } catch (error) {
         console.error('Failed to load data:', error)
@@ -188,11 +239,24 @@ function App() {
         adaptWordLength,
         adaptPunctuation,
         adaptComplexity,
-        trainingMode
+        trainingMode,
+        theme
       })
     }, 500)
     return () => clearTimeout(timeoutId)
-  }, [wpm, adaptWordLength, adaptPunctuation, adaptComplexity, trainingMode, isLoaded])
+  }, [wpm, adaptWordLength, adaptPunctuation, adaptComplexity, trainingMode, theme, isLoaded])
+
+  // Close theme menu when clicking outside
+  useEffect(() => {
+    if (!themeMenuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (themeMenuRef.current && !themeMenuRef.current.contains(e.target as Node)) {
+        setThemeMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [themeMenuOpen])
 
   const createNote = () => {
     const newNote: Note = {
@@ -350,8 +414,8 @@ function App() {
   // Show loading state
   if (!isLoaded) {
     return (
-      <div className="h-screen flex items-center justify-center bg-black text-white">
-        <div className="text-white/40 text-sm">Loading notes...</div>
+      <div className="h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading notes...</div>
       </div>
     )
   }
@@ -359,12 +423,13 @@ function App() {
   // Debug: show if no notes loaded
   if (notes.length === 0) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-black text-white gap-4">
-        <div className="text-white/60 text-sm">No notes found</div>
-        <div className="text-white/30 text-xs">API available: {window.api ? 'yes' : 'no'}</div>
+      <div className="h-screen flex flex-col items-center justify-center gap-4" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+        <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>No notes found</div>
+        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>API available: {window.api ? 'yes' : 'no'}</div>
         <button
           onClick={createNote}
-          className="px-4 py-2 bg-indigo-500 rounded-lg text-sm"
+          className="px-4 py-2 rounded-lg text-sm"
+          style={{ background: 'var(--accent)', color: 'var(--text-primary)' }}
         >
           Create first note
         </button>
@@ -373,17 +438,18 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex bg-black text-white overflow-hidden select-none">
+    <div className="h-screen flex overflow-hidden select-none" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       {/* Sidebar */}
       <aside
-        className={`${sidebarOpen ? 'w-72' : 'w-0'} flex flex-col bg-black/80 backdrop-blur-2xl border-r border-white/[0.06] transition-all duration-300 ease-out overflow-hidden shrink-0`}
+        className={`${sidebarOpen ? 'w-72' : 'w-0'} flex flex-col backdrop-blur-2xl border-r transition-all duration-300 ease-out overflow-hidden shrink-0`}
+        style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
       >
         {/* Titlebar drag region */}
         <div
           className="h-12 shrink-0 flex items-center justify-end pr-4"
           style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: 'var(--text-muted)' }}>
             Notes
           </h2>
         </div>
@@ -398,18 +464,24 @@ function App() {
               onDragStart={(e) => handleDragStart(e, note.id)}
               onDragOver={(e) => handleDragOver(e, note.id)}
               onDragEnd={handleDragEnd}
-              className={`group relative flex flex-col gap-1 p-3.5 mb-1.5 rounded-xl cursor-pointer transition-all duration-200 ${
-                activeNoteId === note.id
-                  ? 'bg-indigo-500/10'
-                  : 'hover:bg-white/[0.04]'
-              } ${draggedNoteId === note.id ? 'opacity-40 scale-[0.98]' : ''}`}
+              className={`group relative flex flex-col gap-1 p-3.5 mb-1.5 rounded-xl cursor-pointer transition-all duration-200 ${draggedNoteId === note.id ? 'opacity-40 scale-[0.98]' : ''}`}
+              style={{
+                background: activeNoteId === note.id ? 'var(--accent-subtle)' : undefined
+              }}
+              onMouseEnter={(e) => {
+                if (activeNoteId !== note.id) e.currentTarget.style.background = 'var(--bg-hover)'
+              }}
+              onMouseLeave={(e) => {
+                if (activeNoteId !== note.id) e.currentTarget.style.background = ''
+              }}
             >
               <span
-                className={`text-[13px] font-medium truncate pr-6 ${activeNoteId === note.id ? 'text-white' : 'text-white/70'}`}
+                className="text-[13px] font-medium truncate pr-6"
+                style={{ color: activeNoteId === note.id ? 'var(--text-primary)' : 'var(--text-secondary)' }}
               >
                 {getFirstLine(note.content) || 'Untitled'}
               </span>
-              <span className="text-[12px] text-white/35 truncate leading-relaxed">
+              <span className="text-[12px] truncate leading-relaxed" style={{ color: 'var(--text-muted)' }}>
                 {(() => {
                   const text = stripHtml(note.content).trim()
                   const lines = text.split('\n').filter(l => l.trim())
@@ -422,7 +494,10 @@ function App() {
                   e.stopPropagation()
                   deleteNote(note.id)
                 }}
-                className="absolute top-3 right-2.5 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/10 text-white/30 hover:text-white/70 transition-all duration-150 cursor-pointer outline-none"
+                className="absolute top-3 right-2.5 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer outline-none"
+                style={{ color: 'var(--text-muted)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -433,11 +508,14 @@ function App() {
           ))}
         </div>
 
-        {/* New note button */}
-        <div className="p-3 border-t border-white/[0.06]">
+        {/* Bottom actions */}
+        <div className="p-3 flex gap-2" style={{ borderTop: '1px solid var(--border)' }}>
           <button
             onClick={createNote}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.06] hover:border-white/[0.1] text-white/60 hover:text-white/90 text-[13px] font-medium transition-all duration-200 cursor-pointer outline-none"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 cursor-pointer outline-none"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -445,6 +523,103 @@ function App() {
             </svg>
             New Note
           </button>
+          <div className="relative self-stretch" ref={themeMenuRef}>
+            <button
+              onClick={() => { setThemeMenuOpen(!themeMenuOpen); setThemeSearch('') }}
+              className="h-full flex items-center justify-center px-3 rounded-xl transition-all duration-200 cursor-pointer outline-none"
+              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+              title="Theme"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              </svg>
+            </button>
+            {/* Theme selector dropdown */}
+            {themeMenuOpen && (() => {
+              const filteredThemes = themes.filter((t) =>
+                themeSearch === '' ||
+                t.name.toLowerCase().includes(themeSearch.toLowerCase()) ||
+                t.description.toLowerCase().includes(themeSearch.toLowerCase())
+              )
+              return (
+              <div className="absolute bottom-full right-0 mb-2 w-56 backdrop-blur-2xl rounded-xl p-2 shadow-2xl" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.15em] px-2 py-1.5 mb-1" style={{ color: 'var(--text-muted)' }}>
+                  Theme
+                </div>
+                <div className="px-1 pb-2">
+                  <input
+                    type="text"
+                    value={themeSearch}
+                    onChange={(e) => { setThemeSearch(e.target.value); setThemeHighlightIndex(0) }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        setThemeHighlightIndex((i) => Math.min(i + 1, filteredThemes.length - 1))
+                        const items = themeListRef.current?.children
+                        if (items && items[themeHighlightIndex + 1]) {
+                          items[themeHighlightIndex + 1].scrollIntoView({ block: 'nearest' })
+                        }
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        setThemeHighlightIndex((i) => Math.max(i - 1, 0))
+                        const items = themeListRef.current?.children
+                        if (items && items[themeHighlightIndex - 1]) {
+                          items[themeHighlightIndex - 1].scrollIntoView({ block: 'nearest' })
+                        }
+                      } else if (e.key === 'Enter' && filteredThemes[themeHighlightIndex]) {
+                        e.preventDefault()
+                        setTheme(filteredThemes[themeHighlightIndex].id)
+                        setThemeMenuOpen(false)
+                        setThemeSearch('')
+                        setThemeHighlightIndex(0)
+                      } else if (e.key === 'Escape') {
+                        setThemeMenuOpen(false)
+                        setThemeSearch('')
+                        setThemeHighlightIndex(0)
+                      }
+                    }}
+                    placeholder="Search themes..."
+                    className="w-full px-2.5 py-1.5 rounded-lg text-[13px] outline-none"
+                    style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+                    autoFocus
+                  />
+                </div>
+                <div ref={themeListRef} className="max-h-64 overflow-y-auto scrollbar-thin">
+                {filteredThemes.map((t, index) => (
+                  <button
+                    key={t.id}
+                    onClick={() => {
+                      setTheme(t.id)
+                      setThemeMenuOpen(false)
+                      setThemeSearch('')
+                      setThemeHighlightIndex(0)
+                    }}
+                    className="w-full flex flex-col gap-0.5 px-3 py-2 rounded-lg text-left transition-all duration-150 cursor-pointer"
+                    style={{
+                      background: index === themeHighlightIndex ? 'var(--bg-hover)' : theme === t.id ? 'var(--accent-subtle)' : undefined,
+                      color: theme === t.id ? 'var(--text-primary)' : 'var(--text-secondary)'
+                    }}
+                    onMouseEnter={() => setThemeHighlightIndex(index)}
+                  >
+                    <span className="text-[13px] font-medium flex items-center gap-2">
+                      {t.name}
+                      {theme === t.id && (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t.description}</span>
+                  </button>
+                ))}
+                </div>
+              </div>
+              )
+            })()}
+          </div>
         </div>
       </aside>
 
@@ -452,13 +627,16 @@ function App() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Unified titlebar/navbar */}
         <nav
-          className={`h-12 shrink-0 flex items-center justify-between pr-4 border-b border-white/[0.06] bg-black/60 backdrop-blur-2xl transition-all duration-300 ${sidebarOpen ? 'pl-4' : 'pl-[88px]'}`}
-          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+          className={`h-12 shrink-0 flex items-center justify-between pr-4 border-b backdrop-blur-2xl transition-all duration-300 ${sidebarOpen ? 'pl-4' : 'pl-[88px]'}`}
+          style={{ WebkitAppRegion: 'drag', background: 'var(--bg-secondary)', borderColor: 'var(--border)' } as React.CSSProperties}
         >
           <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-lg hover:bg-white/[0.08] text-white/50 hover:text-white/80 transition-all duration-200 cursor-pointer outline-none"
+              className="p-2 rounded-lg transition-all duration-200 cursor-pointer outline-none"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
               title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
@@ -468,7 +646,7 @@ function App() {
             </button>
           </div>
 
-          <h1 className="absolute left-1/2 -translate-x-1/2 text-[13px] font-medium text-white/40 tracking-tight">
+          <h1 className="absolute left-1/2 -translate-x-1/2 text-[13px] font-medium tracking-tight" style={{ color: 'var(--text-muted)' }}>
             {(activeNote && getFirstLine(activeNote.content)) || 'Readly'}
           </h1>
 
@@ -476,7 +654,8 @@ function App() {
             <button
               onClick={openReader}
               disabled={!activeNote?.content.trim() || !stripHtml(activeNote?.content || '').trim()}
-              className="px-3.5 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-[13px] font-medium shadow-lg shadow-indigo-500/20 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-indigo-500 transition-all duration-200 cursor-pointer outline-none"
+              className="px-3.5 py-1.5 rounded-lg text-[13px] font-medium shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer outline-none"
+              style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}
             >
               Reader
             </button>
@@ -496,8 +675,8 @@ function App() {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-6">
-              <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-white/30">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-muted)' }}>
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                   <polyline points="14 2 14 8 20 8" />
                   <line x1="12" y1="18" x2="12" y2="12" />
@@ -505,10 +684,13 @@ function App() {
                 </svg>
               </div>
               <div className="text-center">
-                <p className="text-white/40 text-[15px] mb-4">No note selected</p>
+                <p className="text-[15px] mb-4" style={{ color: 'var(--text-muted)' }}>No note selected</p>
                 <button
                   onClick={createNote}
-                  className="px-5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] hover:border-white/[0.12] text-white/70 hover:text-white text-[13px] font-medium transition-all duration-200 cursor-pointer outline-none"
+                  className="px-5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 cursor-pointer outline-none"
+                  style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
                 >
                   Create a new note
                 </button>
@@ -520,28 +702,25 @@ function App() {
 
       {/* Reader Overlay */}
       {readerOpen && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col">
-          {/* Ambient background */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-500/[0.03] blur-[150px] rounded-full" />
-            <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-violet-500/[0.03] blur-[150px] rounded-full" />
-          </div>
-
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--bg-primary)' }}>
           {/* Reader topbar */}
           <nav
-            className="h-12 shrink-0 flex items-center justify-between px-4 border-b border-white/[0.06] bg-black/60 backdrop-blur-2xl"
-            style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+            className="h-12 shrink-0 flex items-center justify-between px-4 border-b backdrop-blur-2xl"
+            style={{ WebkitAppRegion: 'drag', background: 'var(--bg-secondary)', borderColor: 'var(--border)' } as React.CSSProperties}
           >
             <div className="w-10" /> {/* Spacer for centering */}
 
-            <span className="text-[13px] font-medium text-white/40 tracking-tight">
+            <span className="text-[13px] font-medium tracking-tight" style={{ color: 'var(--text-muted)' }}>
               {(activeNote && getFirstLine(activeNote.content)) || 'Reader'}
             </span>
 
             <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
               <button
                 onClick={closeReader}
-                className="p-2 rounded-lg hover:bg-white/[0.08] text-white/50 hover:text-white/80 transition-all duration-200 cursor-pointer outline-none"
+                className="p-2 rounded-lg transition-all duration-200 cursor-pointer outline-none"
+                style={{ color: 'var(--text-muted)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
                 title="Close reader"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -555,9 +734,9 @@ function App() {
           {/* Word display area */}
           <div className="flex-1 flex items-center justify-center relative pointer-events-none">
             {/* ORP guide line */}
-            <div className="absolute left-1/2 top-[30%] bottom-[30%] w-px bg-indigo-500/20" />
-            <div className="absolute left-1/2 -translate-x-1/2 top-[30%] w-1.5 h-3 bg-indigo-500/40 rounded-b-full" />
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-[30%] w-1.5 h-3 bg-indigo-500/40 rounded-t-full" />
+            <div className="absolute left-1/2 top-[30%] bottom-[30%] w-px" style={{ background: 'var(--accent-muted)', opacity: 0.3 }} />
+            <div className="absolute left-1/2 -translate-x-1/2 top-[30%] w-1.5 h-3 rounded-b-full" style={{ background: 'var(--accent-muted)' }} />
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-[30%] w-1.5 h-3 rounded-t-full" style={{ background: 'var(--accent-muted)' }} />
 
             {/* Word container */}
             <div className="relative w-full max-w-5xl px-8">
@@ -565,33 +744,35 @@ function App() {
                 <div className="relative h-32 flex items-center justify-center font-mono text-5xl md:text-6xl lg:text-7xl font-medium tracking-tight whitespace-nowrap">
                   {/* Prefix - positioned to the left of center */}
                   <span
-                    className="absolute text-white/20 text-right whitespace-nowrap"
+                    className="absolute text-right whitespace-nowrap"
                     style={{
                       right: '50%',
-                      marginRight: '0.5ch'
+                      marginRight: '0.5ch',
+                      color: 'var(--text-faint)'
                     }}
                   >
                     {orp.prefix}
                   </span>
 
                   {/* ORP character - centered */}
-                  <span className="relative text-indigo-400 drop-shadow-[0_0_30px_rgba(129,140,248,0.5)]">
+                  <span className="relative" style={{ color: 'var(--accent)' }}>
                     {orp.char}
                   </span>
 
                   {/* Suffix - positioned to the right of center */}
                   <span
-                    className="absolute text-white/20 text-left whitespace-nowrap"
+                    className="absolute text-left whitespace-nowrap"
                     style={{
                       left: '50%',
-                      marginLeft: '0.5ch'
+                      marginLeft: '0.5ch',
+                      color: 'var(--text-faint)'
                     }}
                   >
                     {orp.suffix}
                   </span>
                 </div>
               ) : (
-                <div className="text-center text-white/30 text-sm uppercase tracking-[0.3em]">
+                <div className="text-center text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--text-muted)' }}>
                   {currentIdx >= words.length && words.length > 0
                     ? 'Finished — Press Space to restart'
                     : 'Press Space to begin'}
@@ -606,11 +787,12 @@ function App() {
             onMouseEnter={() => setControlsHovered(true)}
             onMouseLeave={() => setControlsHovered(false)}
           >
-            <div className="flex items-center gap-2 bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] rounded-full px-2 py-2 shadow-2xl shadow-black/40">
+            <div className="flex items-center gap-2 backdrop-blur-2xl rounded-full px-2 py-2 shadow-2xl" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
               {/* Play/Pause */}
               <button
                 onClick={togglePlay}
-                className="p-2.5 rounded-full bg-indigo-500 hover:bg-indigo-400 text-white shadow-lg shadow-indigo-500/25 transition-all duration-200 active:scale-95 cursor-pointer outline-none"
+                className="p-2.5 rounded-full shadow-lg transition-all duration-200 active:scale-95 cursor-pointer outline-none"
+                style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}
               >
                 {isPlaying ? (
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -635,12 +817,12 @@ function App() {
               />
 
               {/* Progress text */}
-              <span className="text-[11px] text-white/40 font-mono px-1 min-w-[3.5rem] text-center">
+              <span className="text-[11px] font-mono px-1 min-w-[3.5rem] text-center" style={{ color: 'var(--text-muted)' }}>
                 {currentIdx + 1}/{words.length}
               </span>
 
               {/* Divider */}
-              <div className="w-px h-5 bg-white/[0.1]" />
+              <div className="w-px h-5" style={{ background: 'var(--border)' }} />
 
               {/* Speed control */}
               <input
@@ -651,15 +833,21 @@ function App() {
                 onChange={(e) => setWpm(parseInt(e.target.value))}
                 className="w-20 outline-none"
               />
-              <span className="text-[11px] text-white/40 font-mono pr-1 min-w-[3rem]">{wpm}</span>
+              <span className="text-[11px] font-mono pr-1 min-w-[3rem]" style={{ color: 'var(--text-muted)' }}>{wpm}</span>
 
               {/* Divider */}
-              <div className="w-px h-5 bg-white/[0.1]" />
+              <div className="w-px h-5" style={{ background: 'var(--border)' }} />
 
               {/* Settings button */}
               <button
                 onClick={() => setSettingsOpen(!settingsOpen)}
-                className={`p-2 rounded-full transition-all duration-200 cursor-pointer outline-none ${settingsOpen ? 'bg-indigo-500/20 text-indigo-400' : 'hover:bg-white/[0.08] text-white/50 hover:text-white/80'}`}
+                className="p-2 rounded-full transition-all duration-200 cursor-pointer outline-none"
+                style={{
+                  background: settingsOpen ? 'var(--accent-subtle)' : undefined,
+                  color: settingsOpen ? 'var(--accent)' : 'var(--text-muted)'
+                }}
+                onMouseEnter={(e) => { if (!settingsOpen) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
+                onMouseLeave={(e) => { if (!settingsOpen) { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' } }}
                 title="Adaptive settings"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -671,74 +859,74 @@ function App() {
 
             {/* Settings panel */}
             {settingsOpen && (
-              <div ref={settingsRef} className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-black/95 backdrop-blur-2xl border border-white/[0.1] rounded-2xl p-4 shadow-2xl shadow-black/50 min-w-[280px]">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-white/40 mb-4">Adaptive Reading</h3>
+              <div ref={settingsRef} className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 backdrop-blur-2xl rounded-2xl p-4 shadow-2xl min-w-[280px]" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.15em] mb-4" style={{ color: 'var(--text-muted)' }}>Adaptive Reading</h3>
 
                 {/* Word Length Toggle */}
                 <label className="flex items-center justify-between py-2.5 cursor-pointer group">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[13px] text-white/80 group-hover:text-white transition-colors">Word Length</span>
-                    <span className="text-[11px] text-white/35">Longer words display longer</span>
+                    <span className="text-[13px] transition-colors" style={{ color: 'var(--text-secondary)' }}>Word Length</span>
+                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Longer words display longer</span>
                   </div>
-                  <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${adaptWordLength ? 'bg-indigo-500' : 'bg-white/10'}`}>
+                  <div className="relative w-10 h-6 rounded-full transition-colors duration-200" style={{ background: adaptWordLength ? 'var(--accent)' : 'var(--bg-hover)' }}>
                     <input
                       type="checkbox"
                       checked={adaptWordLength}
                       onChange={(e) => setAdaptWordLength(e.target.checked)}
                       className="sr-only"
                     />
-                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${adaptWordLength ? 'translate-x-5' : 'translate-x-1'}`} />
+                    <div className={`absolute top-1 w-4 h-4 rounded-full shadow transition-transform duration-200 ${adaptWordLength ? 'translate-x-5' : 'translate-x-1'}`} style={{ background: 'var(--text-primary)' }} />
                   </div>
                 </label>
 
                 {/* Punctuation Toggle */}
-                <label className="flex items-center justify-between py-2.5 cursor-pointer group border-t border-white/[0.06]">
+                <label className="flex items-center justify-between py-2.5 cursor-pointer group" style={{ borderTop: '1px solid var(--border)' }}>
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[13px] text-white/80 group-hover:text-white transition-colors">Punctuation Pauses</span>
-                    <span className="text-[11px] text-white/35">Pause at sentences & clauses</span>
+                    <span className="text-[13px] transition-colors" style={{ color: 'var(--text-secondary)' }}>Punctuation Pauses</span>
+                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Pause at sentences & clauses</span>
                   </div>
-                  <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${adaptPunctuation ? 'bg-indigo-500' : 'bg-white/10'}`}>
+                  <div className="relative w-10 h-6 rounded-full transition-colors duration-200" style={{ background: adaptPunctuation ? 'var(--accent)' : 'var(--bg-hover)' }}>
                     <input
                       type="checkbox"
                       checked={adaptPunctuation}
                       onChange={(e) => setAdaptPunctuation(e.target.checked)}
                       className="sr-only"
                     />
-                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${adaptPunctuation ? 'translate-x-5' : 'translate-x-1'}`} />
+                    <div className={`absolute top-1 w-4 h-4 rounded-full shadow transition-transform duration-200 ${adaptPunctuation ? 'translate-x-5' : 'translate-x-1'}`} style={{ background: 'var(--text-primary)' }} />
                   </div>
                 </label>
 
                 {/* Complexity Toggle */}
-                <label className="flex items-center justify-between py-2.5 cursor-pointer group border-t border-white/[0.06]">
+                <label className="flex items-center justify-between py-2.5 cursor-pointer group" style={{ borderTop: '1px solid var(--border)' }}>
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[13px] text-white/80 group-hover:text-white transition-colors">Word Complexity</span>
-                    <span className="text-[11px] text-white/35">Uncommon words display longer</span>
+                    <span className="text-[13px] transition-colors" style={{ color: 'var(--text-secondary)' }}>Word Complexity</span>
+                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Uncommon words display longer</span>
                   </div>
-                  <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${adaptComplexity ? 'bg-indigo-500' : 'bg-white/10'}`}>
+                  <div className="relative w-10 h-6 rounded-full transition-colors duration-200" style={{ background: adaptComplexity ? 'var(--accent)' : 'var(--bg-hover)' }}>
                     <input
                       type="checkbox"
                       checked={adaptComplexity}
                       onChange={(e) => setAdaptComplexity(e.target.checked)}
                       className="sr-only"
                     />
-                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${adaptComplexity ? 'translate-x-5' : 'translate-x-1'}`} />
+                    <div className={`absolute top-1 w-4 h-4 rounded-full shadow transition-transform duration-200 ${adaptComplexity ? 'translate-x-5' : 'translate-x-1'}`} style={{ background: 'var(--text-primary)' }} />
                   </div>
                 </label>
 
                 {/* Training Mode Toggle */}
-                <label className="flex items-center justify-between py-2.5 cursor-pointer group border-t border-white/[0.06]">
+                <label className="flex items-center justify-between py-2.5 cursor-pointer group" style={{ borderTop: '1px solid var(--border)' }}>
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[13px] text-white/80 group-hover:text-white transition-colors">Training Mode</span>
-                    <span className="text-[11px] text-white/35">Speed increases as you read</span>
+                    <span className="text-[13px] transition-colors" style={{ color: 'var(--text-secondary)' }}>Training Mode</span>
+                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Speed increases as you read</span>
                   </div>
-                  <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${trainingMode ? 'bg-indigo-500' : 'bg-white/10'}`}>
+                  <div className="relative w-10 h-6 rounded-full transition-colors duration-200" style={{ background: trainingMode ? 'var(--accent)' : 'var(--bg-hover)' }}>
                     <input
                       type="checkbox"
                       checked={trainingMode}
                       onChange={(e) => setTrainingMode(e.target.checked)}
                       className="sr-only"
                     />
-                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${trainingMode ? 'translate-x-5' : 'translate-x-1'}`} />
+                    <div className={`absolute top-1 w-4 h-4 rounded-full shadow transition-transform duration-200 ${trainingMode ? 'translate-x-5' : 'translate-x-1'}`} style={{ background: 'var(--text-primary)' }} />
                   </div>
                 </label>
               </div>
