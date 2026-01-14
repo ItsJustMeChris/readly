@@ -1,1 +1,133 @@
 @import "tailwindcss";
+
+/* Custom scrollbar */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* Smooth text rendering */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Focus styles */
+input:focus,
+textarea:focus {
+  outline: none;
+}
+
+/* Selection color */
+::selection {
+  background: rgba(99, 102, 241, 0.4);
+}
+
+/* Textarea scrollbar */
+textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Custom range slider - line style */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  height: 16px;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 3px;
+  border-radius: 1px;
+  background: #a5b4fc;
+  margin-top: -5.5px;
+  transition: background 0.15s ease, height 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  background: #c7d2fe;
+  height: 16px;
+  margin-top: -6.5px;
+}
+
+/* Firefox */
+input[type="range"]::-moz-range-track {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}
+
+input[type="range"]::-moz-range-thumb {
+  height: 14px;
+  width: 3px;
+  border-radius: 1px;
+  background: #a5b4fc;
+  border: none;
+}
+
+/* Mono font for reader */
+.font-mono {
+  font-family: "SF Mono", "JetBrains Mono", "Fira Code", "Menlo", monospace;
+}
+
+/* Close button X via pseudo-elements */
+.close-btn::before,
+.close-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.close-btn::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.close-btn::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}

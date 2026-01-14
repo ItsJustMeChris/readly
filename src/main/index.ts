@@ -4,9 +4,15 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
     show: false,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 18, y: 16 },
+    vibrancy: 'sidebar',
+    visualEffectState: 'active',
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
