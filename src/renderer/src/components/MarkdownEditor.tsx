@@ -6,6 +6,7 @@ import Typography from '@tiptap/extension-typography'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
 import { marked } from 'marked'
+import TurndownService from 'turndown'
 
 // Create lowlight instance with common languages
 const lowlight = createLowlight(common)
@@ -13,8 +14,19 @@ const lowlight = createLowlight(common)
 // Configure marked for sync parsing
 marked.use({ async: false })
 
-// Check if text looks like markdown
+// Configure turndown for HTML to Markdown conversion
+const turndown = new TurndownService({
+  headingStyle: 'atx',
+  codeBlockStyle: 'fenced',
+  emDelimiter: '*',
+  bulletListMarker: '-',
+})
+
+// Check if text looks like markdown (not HTML)
 function looksLikeMarkdown(text: string): boolean {
+  // If it starts with HTML tags, it's probably HTML
+  if (text.trim().startsWith('<')) return false
+
   const markdownPatterns = [
     /^#{1,6}\s+/m,           // Headings
     /\*\*[^*]+\*\*/,         // Bold
@@ -28,6 +40,21 @@ function looksLikeMarkdown(text: string): boolean {
     /^---$/m,                // Horizontal rule
   ]
   return markdownPatterns.some(pattern => pattern.test(text))
+}
+
+// Convert markdown to HTML
+function markdownToHtml(markdown: string): string {
+  if (looksLikeMarkdown(markdown)) {
+    return marked.parse(markdown) as string
+  }
+  return markdown
+}
+
+// Convert HTML to markdown
+function htmlToMarkdown(html: string): string {
+  // Don't convert if it's empty or just whitespace
+  if (!html || html.trim() === '' || html === '<p></p>') return ''
+  return turndown.turndown(html)
 }
 
 interface MarkdownEditorProps {
@@ -56,10 +83,11 @@ function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorProps) {
         defaultLanguage: 'plaintext',
       }),
     ],
-    content: value,
+    content: markdownToHtml(value),
     onUpdate: ({ editor }) => {
       const html = editor.getHTML()
-      onChange(html)
+      const markdown = htmlToMarkdown(html)
+      onChange(markdown)
     },
     editorProps: {
       attributes: {
@@ -93,8 +121,13 @@ function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorProps) {
 
   // Sync external value changes (e.g., when switching notes)
   useEffect(() => {
-    if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value, false)
+    if (editor) {
+      const htmlContent = markdownToHtml(value)
+      const currentHtml = editor.getHTML()
+      // Compare the markdown representations to avoid unnecessary updates
+      if (htmlToMarkdown(currentHtml) !== value) {
+        editor.commands.setContent(htmlContent, false)
+      }
     }
   }, [editor, value])
 

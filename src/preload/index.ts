@@ -5,6 +5,21 @@ interface Note {
   id: string
   title: string
   content: string
+  folderId: string | null
+  order: number
+}
+
+interface Folder {
+  id: string
+  name: string
+  parentId: string | null
+  collapsed: boolean
+  order: number
+}
+
+interface AppData {
+  folders: Folder[]
+  notes: Note[]
 }
 
 interface AppSettings {
@@ -16,8 +31,8 @@ interface AppSettings {
 }
 
 const api = {
-  loadNotes: (): Promise<Note[]> => ipcRenderer.invoke('notes:load'),
-  saveNotes: (notes: Note[]): Promise<boolean> => ipcRenderer.invoke('notes:save', notes),
+  loadData: (): Promise<AppData> => ipcRenderer.invoke('data:load'),
+  saveData: (data: AppData): Promise<boolean> => ipcRenderer.invoke('data:save', data),
   loadSettings: (): Promise<AppSettings | null> => ipcRenderer.invoke('settings:load'),
   saveSettings: (settings: AppSettings): Promise<boolean> => ipcRenderer.invoke('settings:save', settings)
 }

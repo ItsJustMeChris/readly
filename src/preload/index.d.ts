@@ -4,6 +4,21 @@ interface Note {
   id: string
   title: string
   content: string
+  folderId: string | null
+  order: number
+}
+
+interface Folder {
+  id: string
+  name: string
+  parentId: string | null
+  collapsed: boolean
+  order: number
+}
+
+interface AppData {
+  folders: Folder[]
+  notes: Note[]
 }
 
 interface AppSettings {
@@ -15,8 +30,8 @@ interface AppSettings {
 }
 
 interface ReadlyAPI {
-  loadNotes: () => Promise<Note[]>
-  saveNotes: (notes: Note[]) => Promise<boolean>
+  loadData: () => Promise<AppData>
+  saveData: (data: AppData) => Promise<boolean>
   loadSettings: () => Promise<AppSettings | null>
   saveSettings: (settings: AppSettings) => Promise<boolean>
 }

@@ -12,9 +12,26 @@ function stripHtml(html: string): string {
   return doc.body.textContent || ''
 }
 
+// Strip markdown syntax from text
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, '')        // Headings
+    .replace(/\*\*([^*]+)\*\*/g, '$1')  // Bold
+    .replace(/\*([^*]+)\*/g, '$1')      // Italic
+    .replace(/__([^_]+)__/g, '$1')      // Bold alt
+    .replace(/_([^_]+)_/g, '$1')        // Italic alt
+    .replace(/`([^`]+)`/g, '$1')        // Inline code
+    .replace(/~~([^~]+)~~/g, '$1')      // Strikethrough
+    .replace(/^\s*[-*+]\s+/gm, '')      // List items
+    .replace(/^\s*\d+\.\s+/gm, '')      // Numbered lists
+    .replace(/^\s*>\s*/gm, '')          // Blockquotes
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Links
+    .trim()
+}
+
 // Get the first line of content as the title
-function getFirstLine(html: string): string {
-  const text = stripHtml(html).trim()
+function getFirstLine(content: string): string {
+  const text = stripMarkdown(content).trim()
   const firstLine = text.split('\n')[0]?.trim() || ''
   return firstLine.slice(0, 100) // Limit length
 }
@@ -23,7 +40,21 @@ interface Note {
   id: string
   title: string
   content: string
+  folderId: string | null
+  previousFolderId?: string | null  // Stores original location when trashed
+  order: number
 }
+
+interface Folder {
+  id: string
+  name: string
+  parentId: string | null
+  collapsed: boolean
+  order: number
+}
+
+// Special folder ID for trash - notes here are "soft deleted"
+const TRASH_FOLDER_ID = '__trash__'
 
 // ORP (Optimal Recognition Point) calculator
 function getORP(word: string) {
@@ -134,9 +165,13 @@ type ThemeId = typeof themes[number]['id']
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [notes, setNotes] = useState<Note[]>([])
+  const [folders, setFolders] = useState<Folder[]>([])
   const [activeNoteId, setActiveNoteId] = useState<string>('')
   const [isLoaded, setIsLoaded] = useState(false)
-  const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null)
+  const [draggedItem, setDraggedItem] = useState<{ id: string; type: 'note' | 'folder' } | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ id: string; type: 'folder' | 'root' } | null>(null)
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
+  const [trashCollapsed, setTrashCollapsed] = useState(true)
 
   // Theme state
   const [theme, setTheme] = useState<ThemeId>('default')
@@ -176,23 +211,26 @@ function App() {
 
   const activeNote = notes.find((n) => n.id === activeNoteId)
 
-  // Load notes and settings on mount
+  // Load data and settings on mount
   useEffect(() => {
-    const loadData = async () => {
+    const loadAppData = async () => {
       // Check if API is available
-      if (!window.api || typeof window.api.loadNotes !== 'function') {
+      if (!window.api || typeof window.api.loadData !== 'function') {
         console.error('window.api not available:', window.api)
         setIsLoaded(true)
         return
       }
 
       try {
-        const savedNotes = await window.api.loadNotes()
+        const savedData = await window.api.loadData()
         const savedSettings = await window.api.loadSettings()
 
-        if (savedNotes && savedNotes.length > 0) {
-          setNotes(savedNotes)
-          setActiveNoteId(savedNotes[0].id)
+        if (savedData) {
+          setNotes(savedData.notes || [])
+          setFolders(savedData.folders || [])
+          if (savedData.notes && savedData.notes.length > 0) {
+            setActiveNoteId(savedData.notes[0].id)
+          }
         }
 
         // Apply saved settings if available
@@ -209,26 +247,26 @@ function App() {
       }
       setIsLoaded(true)
     }
-    loadData()
+    loadAppData()
   }, [])
 
-  // Save notes when they change (debounced)
+  // Save data when notes or folders change (debounced)
   const isInitialMount = useRef(true)
   useEffect(() => {
-    if (!isLoaded || !window.api?.saveNotes) return
+    if (!isLoaded || !window.api?.saveData) return
     // Skip saving on initial load
     if (isInitialMount.current) {
       isInitialMount.current = false
       return
     }
     const timeoutId = setTimeout(() => {
-      console.log('Saving notes to disk...')
-      window.api.saveNotes(notes).then(() => {
-        console.log('Notes saved!')
+      console.log('Saving data to disk...')
+      window.api.saveData({ folders, notes }).then(() => {
+        console.log('Data saved!')
       })
     }, 500)
     return () => clearTimeout(timeoutId)
-  }, [notes, isLoaded])
+  }, [notes, folders, isLoaded])
 
   // Save settings when they change
   useEffect(() => {
@@ -258,11 +296,24 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [themeMenuOpen])
 
-  const createNote = () => {
+  // Get the next order value for items at a level
+  const getNextOrder = (parentId: string | null, type: 'note' | 'folder') => {
+    if (type === 'note') {
+      const notesAtLevel = notes.filter(n => n.folderId === parentId)
+      return notesAtLevel.length > 0 ? Math.max(...notesAtLevel.map(n => n.order)) + 1 : 0
+    } else {
+      const foldersAtLevel = folders.filter(f => f.parentId === parentId)
+      return foldersAtLevel.length > 0 ? Math.max(...foldersAtLevel.map(f => f.order)) + 1 : 0
+    }
+  }
+
+  const createNote = (folderId: string | null = null) => {
     const newNote: Note = {
       id: crypto.randomUUID(),
       title: '',
-      content: ''
+      content: '',
+      folderId,
+      order: getNextOrder(folderId, 'note')
     }
     setNotes([newNote, ...notes])
     setActiveNoteId(newNote.id)
@@ -273,32 +324,152 @@ function App() {
   }
 
   const deleteNote = (id: string) => {
-    const filtered = notes.filter((n) => n.id !== id)
-    setNotes(filtered)
-    if (activeNoteId === id && filtered.length > 0) {
-      setActiveNoteId(filtered[0].id)
+    const note = notes.find((n) => n.id === id)
+    if (!note) return
+
+    // If note is already in trash, permanently delete it
+    if (note.folderId === TRASH_FOLDER_ID) {
+      const filtered = notes.filter((n) => n.id !== id)
+      setNotes(filtered)
+      if (activeNoteId === id) {
+        // Select another note in trash, or first note overall, or none
+        const trashNotes = filtered.filter((n) => n.folderId === TRASH_FOLDER_ID)
+        if (trashNotes.length > 0) {
+          setActiveNoteId(trashNotes[0].id)
+        } else if (filtered.length > 0) {
+          setActiveNoteId(filtered[0].id)
+        } else {
+          setActiveNoteId(null)
+        }
+      }
+    } else {
+      // Move note to trash (soft delete), storing original location
+      setNotes(notes.map((n) => n.id === id ? { ...n, previousFolderId: n.folderId, folderId: TRASH_FOLDER_ID } : n))
+      if (activeNoteId === id) {
+        // Select another note not in trash
+        const remaining = notes.filter((n) => n.id !== id && n.folderId !== TRASH_FOLDER_ID)
+        setActiveNoteId(remaining.length > 0 ? remaining[0].id : null)
+      }
     }
   }
 
-  const handleDragStart = (e: React.DragEvent, noteId: string) => {
-    setDraggedNoteId(noteId)
+  const createFolder = (parentId: string | null = null) => {
+    const newFolder: Folder = {
+      id: crypto.randomUUID(),
+      name: 'New Folder',
+      parentId,
+      collapsed: false,
+      order: getNextOrder(parentId, 'folder')
+    }
+    setFolders([...folders, newFolder])
+    setEditingFolderId(newFolder.id)
+  }
+
+  const updateFolder = (id: string, updates: Partial<Folder>) => {
+    setFolders(folders.map((f) => (f.id === id ? { ...f, ...updates } : f)))
+  }
+
+  const deleteFolder = (id: string) => {
+    const folder = folders.find(f => f.id === id)
+    const newParentId = folder?.parentId ?? null
+
+    // Move child folders up to parent
+    setFolders(folders
+      .filter(f => f.id !== id)
+      .map(f => f.parentId === id ? { ...f, parentId: newParentId } : f)
+    )
+
+    // Move child notes up to parent
+    setNotes(notes.map(n =>
+      n.folderId === id ? { ...n, folderId: newParentId } : n
+    ))
+  }
+
+  const toggleFolderCollapse = (id: string) => {
+    setFolders(folders.map(f =>
+      f.id === id ? { ...f, collapsed: !f.collapsed } : f
+    ))
+  }
+
+  const emptyTrash = () => {
+    const filtered = notes.filter((n) => n.folderId !== TRASH_FOLDER_ID)
+    setNotes(filtered)
+    // If active note was in trash, select first remaining note
+    const activeNote = notes.find((n) => n.id === activeNoteId)
+    if (activeNote?.folderId === TRASH_FOLDER_ID) {
+      setActiveNoteId(filtered.length > 0 ? filtered[0].id : null)
+    }
+  }
+
+  const restoreNote = (id: string) => {
+    const note = notes.find((n) => n.id === id)
+    if (!note) return
+    // Restore to previous folder if it still exists, otherwise root
+    const targetFolderId = note.previousFolderId && folders.some((f) => f.id === note.previousFolderId)
+      ? note.previousFolderId
+      : null
+    setNotes(notes.map((n) => n.id === id ? { ...n, folderId: targetFolderId, previousFolderId: undefined } : n))
+  }
+
+  // Check if a folder is a descendant of another folder
+  const isDescendant = (potentialParentId: string, folderId: string): boolean => {
+    let current = folders.find(f => f.id === folderId)
+    while (current) {
+      if (current.parentId === potentialParentId) return true
+      current = folders.find(f => f.id === current?.parentId)
+    }
+    return false
+  }
+
+  const handleDragStart = (e: React.DragEvent, id: string, type: 'note' | 'folder') => {
+    setDraggedItem({ id, type })
     e.dataTransfer.effectAllowed = 'move'
   }
 
-  const handleDragOver = (e: React.DragEvent, noteId: string) => {
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
-    if (draggedNoteId && draggedNoteId !== noteId) {
-      const draggedIndex = notes.findIndex((n) => n.id === draggedNoteId)
-      const targetIndex = notes.findIndex((n) => n.id === noteId)
-      const newNotes = [...notes]
-      const [removed] = newNotes.splice(draggedIndex, 1)
-      newNotes.splice(targetIndex, 0, removed)
-      setNotes(newNotes)
+  }
+
+  const handleDropOnFolder = (e: React.DragEvent, targetFolderId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!draggedItem) return
+
+    if (draggedItem.type === 'note') {
+      setNotes(notes.map(n =>
+        n.id === draggedItem.id ? { ...n, folderId: targetFolderId, order: getNextOrder(targetFolderId, 'note') } : n
+      ))
+    } else {
+      // Prevent dropping folder into itself or its descendants
+      if (draggedItem.id === targetFolderId || isDescendant(draggedItem.id, targetFolderId)) return
+      setFolders(folders.map(f =>
+        f.id === draggedItem.id ? { ...f, parentId: targetFolderId, order: getNextOrder(targetFolderId, 'folder') } : f
+      ))
     }
+    setDraggedItem(null)
+    setDropTarget(null)
+  }
+
+  const handleDropOnRoot = (e: React.DragEvent) => {
+    e.preventDefault()
+    if (!draggedItem) return
+
+    if (draggedItem.type === 'note') {
+      setNotes(notes.map(n =>
+        n.id === draggedItem.id ? { ...n, folderId: null, order: getNextOrder(null, 'note') } : n
+      ))
+    } else {
+      setFolders(folders.map(f =>
+        f.id === draggedItem.id ? { ...f, parentId: null, order: getNextOrder(null, 'folder') } : f
+      ))
+    }
+    setDraggedItem(null)
+    setDropTarget(null)
   }
 
   const handleDragEnd = () => {
-    setDraggedNoteId(null)
+    setDraggedItem(null)
+    setDropTarget(null)
   }
 
   // Reader functions
@@ -420,23 +591,6 @@ function App() {
     )
   }
 
-  // Debug: show if no notes loaded
-  if (notes.length === 0) {
-    return (
-      <div className="h-screen flex flex-col items-center justify-center gap-4" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-        <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>No notes found</div>
-        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>API available: {window.api ? 'yes' : 'no'}</div>
-        <button
-          onClick={createNote}
-          className="px-4 py-2 rounded-lg text-sm"
-          style={{ background: 'var(--accent)', color: 'var(--text-primary)' }}
-        >
-          Create first note
-        </button>
-      </div>
-    )
-  }
-
   return (
     <div className="h-screen flex overflow-hidden select-none" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       {/* Sidebar */}
@@ -446,90 +600,389 @@ function App() {
       >
         {/* Titlebar drag region */}
         <div
-          className="h-12 shrink-0 flex items-center justify-end pr-4"
+          className="h-12 shrink-0 flex items-center justify-end gap-3 px-4"
           style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: 'var(--text-muted)' }}>
             Notes
           </h2>
+          <div className="flex items-center gap-1" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+            <button
+              onClick={() => createNote()}
+              className="p-1.5 rounded-lg transition-all duration-200 cursor-pointer outline-none"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
+              title="New Note"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+            <button
+              onClick={() => createFolder()}
+              className="p-1.5 rounded-lg transition-all duration-200 cursor-pointer outline-none"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
+              title="New Folder"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                <line x1="12" y1="11" x2="12" y2="17" />
+                <line x1="9" y1="14" x2="15" y2="14" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        {/* Notes list */}
-        <div className="flex-1 overflow-y-auto px-3 pb-3 scrollbar-thin">
-          {notes.map((note) => (
-            <div
-              key={note.id}
-              onClick={() => setActiveNoteId(note.id)}
-              draggable
-              onDragStart={(e) => handleDragStart(e, note.id)}
-              onDragOver={(e) => handleDragOver(e, note.id)}
-              onDragEnd={handleDragEnd}
-              className={`group relative flex flex-col gap-1 p-3.5 mb-1.5 rounded-xl cursor-pointer transition-all duration-200 ${draggedNoteId === note.id ? 'opacity-40 scale-[0.98]' : ''}`}
-              style={{
-                background: activeNoteId === note.id ? 'var(--accent-subtle)' : undefined
-              }}
-              onMouseEnter={(e) => {
-                if (activeNoteId !== note.id) e.currentTarget.style.background = 'var(--bg-hover)'
-              }}
-              onMouseLeave={(e) => {
-                if (activeNoteId !== note.id) e.currentTarget.style.background = ''
-              }}
-            >
-              <span
-                className="text-[13px] font-medium truncate pr-6"
-                style={{ color: activeNoteId === note.id ? 'var(--text-primary)' : 'var(--text-secondary)' }}
-              >
-                {getFirstLine(note.content) || 'Untitled'}
-              </span>
-              <span className="text-[12px] truncate leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                {(() => {
-                  const text = stripHtml(note.content).trim()
-                  const lines = text.split('\n').filter(l => l.trim())
-                  const preview = lines.slice(1).join(' ').trim() || (lines[0] ? '' : 'Empty note')
-                  return preview.slice(0, 60) + (preview.length > 60 ? '…' : '')
-                })()}
-              </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  deleteNote(note.id)
-                }}
-                className="absolute top-3 right-2.5 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer outline-none"
-                style={{ color: 'var(--text-muted)' }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-          ))}
+        {/* Folder tree and notes list */}
+        <div
+          className="flex-1 overflow-y-auto px-3 pb-3 scrollbar-thin"
+          onDragOver={handleDragOver}
+          onDrop={handleDropOnRoot}
+        >
+          {/* Render tree recursively */}
+          {(() => {
+            const renderItem = (parentId: string | null, depth: number = 0): React.ReactNode => {
+              const childFolders = folders
+                .filter(f => f.parentId === parentId)
+                .sort((a, b) => a.order - b.order)
+              const childNotes = notes
+                .filter(n => n.folderId === parentId)
+                .sort((a, b) => a.order - b.order)
+
+              return (
+                <>
+                  {childFolders.map((folder) => (
+                    <div key={folder.id} style={{ marginLeft: depth > 0 ? 12 : 0 }}>
+                      {/* Folder item */}
+                      <div
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setDropTarget({ id: folder.id, type: 'folder' })
+                        }}
+                        onDragLeave={() => setDropTarget(null)}
+                        onDrop={(e) => handleDropOnFolder(e, folder.id)}
+                        onDragEnd={handleDragEnd}
+                        className={`group relative flex items-center gap-2 px-2.5 py-2 mb-1 rounded-lg cursor-pointer transition-all duration-200 min-w-0 ${draggedItem?.id === folder.id ? 'opacity-40' : ''}`}
+                        style={{
+                          background: dropTarget?.id === folder.id ? 'var(--accent-subtle)' : undefined,
+                          border: dropTarget?.id === folder.id ? '1px dashed var(--accent)' : '1px solid transparent'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (dropTarget?.id !== folder.id) e.currentTarget.style.background = 'var(--bg-hover)'
+                        }}
+                        onMouseLeave={(e) => {
+                          if (dropTarget?.id !== folder.id) e.currentTarget.style.background = ''
+                        }}
+                      >
+                        {/* Collapse toggle */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleFolderCollapse(folder.id) }}
+                          className="p-0.5 rounded transition-transform duration-200"
+                          style={{ color: 'var(--text-muted)', transform: folder.collapsed ? 'rotate(-90deg)' : undefined }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </button>
+                        {/* Folder icon */}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                        </svg>
+                        {/* Folder name - editable */}
+                        {editingFolderId === folder.id ? (
+                          <input
+                            type="text"
+                            defaultValue={folder.name}
+                            autoFocus
+                            className="flex-1 min-w-0 bg-transparent text-[13px] font-medium outline-none"
+                            style={{ color: 'var(--text-primary)' }}
+                            onBlur={(e) => {
+                              updateFolder(folder.id, { name: e.target.value || 'Untitled' })
+                              setEditingFolderId(null)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                updateFolder(folder.id, { name: (e.target as HTMLInputElement).value || 'Untitled' })
+                                setEditingFolderId(null)
+                              } else if (e.key === 'Escape') {
+                                setEditingFolderId(null)
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span
+                            className="flex-1 min-w-0 text-[13px] font-medium truncate"
+                            style={{ color: 'var(--text-secondary)' }}
+                            onDoubleClick={(e) => { e.stopPropagation(); setEditingFolderId(folder.id) }}
+                          >
+                            {folder.name}
+                          </span>
+                        )}
+                        {/* Add note button */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); createNote(folder.id) }}
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 transition-all duration-150"
+                          style={{ color: 'var(--text-muted)' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
+                          title="Add note"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                          </svg>
+                        </button>
+                        {/* Add subfolder button */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); createFolder(folder.id) }}
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 transition-all duration-150"
+                          style={{ color: 'var(--text-muted)' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
+                          title="Add subfolder"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                            <line x1="12" y1="11" x2="12" y2="17" />
+                            <line x1="9" y1="14" x2="15" y2="14" />
+                          </svg>
+                        </button>
+                        {/* Delete button */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteFolder(folder.id) }}
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 transition-all duration-150"
+                          style={{ color: 'var(--text-muted)' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
+                          title="Delete folder"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+                      {/* Folder children */}
+                      {!folder.collapsed && (
+                        <div className="overflow-hidden">
+                          {renderItem(folder.id, depth + 1)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {childNotes.map((note) => (
+                    <div
+                      key={note.id}
+                      onClick={() => setActiveNoteId(note.id)}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, note.id, 'note')}
+                      onDragOver={handleDragOver}
+                      onDragEnd={handleDragEnd}
+                      className={`group relative flex flex-col gap-1 p-3 mb-1 rounded-xl cursor-pointer transition-all duration-200 ${draggedItem?.id === note.id ? 'opacity-40 scale-[0.98]' : ''}`}
+                      style={{
+                        background: activeNoteId === note.id ? 'var(--accent-subtle)' : undefined,
+                        marginLeft: depth > 0 ? 12 : 0
+                      }}
+                      onMouseEnter={(e) => {
+                        if (activeNoteId !== note.id) e.currentTarget.style.background = 'var(--bg-hover)'
+                      }}
+                      onMouseLeave={(e) => {
+                        if (activeNoteId !== note.id) e.currentTarget.style.background = ''
+                      }}
+                    >
+                      <span
+                        className="text-[13px] font-medium truncate pr-6"
+                        style={{ color: activeNoteId === note.id ? 'var(--text-primary)' : 'var(--text-secondary)' }}
+                      >
+                        {getFirstLine(note.content) || 'Untitled'}
+                      </span>
+                      <span className="text-[12px] truncate leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                        {(() => {
+                          const text = stripMarkdown(note.content).trim()
+                          const lines = text.split('\n').filter(l => l.trim())
+                          const preview = lines.slice(1).join(' ').trim() || (lines[0] ? '' : 'Empty note')
+                          return preview.slice(0, 60) + (preview.length > 60 ? '…' : '')
+                        })()}
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteNote(note.id) }}
+                        className="absolute top-2.5 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer outline-none"
+                        style={{ color: 'var(--text-muted)' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )
+            }
+            return renderItem(null)
+          })()}
+
+          {/* Trash section */}
+          {(() => {
+            const trashNotes = notes.filter((n) => n.folderId === TRASH_FOLDER_ID)
+            if (trashNotes.length === 0) return null
+            return (
+              <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+                {/* Trash folder header */}
+                <div
+                  className="group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all duration-200"
+                  onClick={() => setTrashCollapsed(!trashCollapsed)}
+                  style={{ background: dropTarget?.id === TRASH_FOLDER_ID ? 'var(--accent-subtle)' : undefined }}
+                  onMouseEnter={(e) => { if (dropTarget?.id !== TRASH_FOLDER_ID) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={(e) => { if (dropTarget?.id !== TRASH_FOLDER_ID) e.currentTarget.style.background = '' }}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    if (draggedItem?.type === 'note') {
+                      setDropTarget({ id: TRASH_FOLDER_ID, type: 'folder' })
+                    }
+                  }}
+                  onDragLeave={() => setDropTarget(null)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    if (draggedItem?.type === 'note') {
+                      setNotes(notes.map((n) => n.id === draggedItem.id ? { ...n, folderId: TRASH_FOLDER_ID } : n))
+                    }
+                    setDraggedItem(null)
+                    setDropTarget(null)
+                  }}
+                >
+                  {/* Collapse toggle */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setTrashCollapsed(!trashCollapsed) }}
+                    className="p-0.5 rounded transition-all duration-150"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      style={{ transform: trashCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {/* Trash icon */}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  <span className="flex-1 text-[13px] font-medium" style={{ color: 'var(--text-secondary)' }}>
+                    Trash
+                  </span>
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-md" style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)' }}>
+                    {trashNotes.length}
+                  </span>
+                  {/* Empty trash button */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); emptyTrash() }}
+                    className="p-1 rounded opacity-0 group-hover:opacity-100 transition-all duration-150"
+                    style={{ color: 'var(--text-muted)' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
+                    title="Empty trash"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+                {/* Trash contents */}
+                {!trashCollapsed && (
+                  <div className="mt-1">
+                    {trashNotes.map((note) => (
+                      <div
+                        key={note.id}
+                        onClick={() => setActiveNoteId(note.id)}
+                        className={`group relative flex flex-col gap-1 p-3 mb-1 ml-3 rounded-xl cursor-pointer transition-all duration-200`}
+                        style={{
+                          background: activeNoteId === note.id ? 'var(--accent-subtle)' : undefined
+                        }}
+                        onMouseEnter={(e) => {
+                          if (activeNoteId !== note.id) e.currentTarget.style.background = 'var(--bg-hover)'
+                        }}
+                        onMouseLeave={(e) => {
+                          if (activeNoteId !== note.id) e.currentTarget.style.background = ''
+                        }}
+                      >
+                        <span
+                          className="text-[13px] font-medium truncate pr-16"
+                          style={{ color: activeNoteId === note.id ? 'var(--text-primary)' : 'var(--text-secondary)' }}
+                        >
+                          {getFirstLine(note.content) || 'Untitled'}
+                        </span>
+                        <span className="text-[12px] truncate leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                          {(() => {
+                            const text = stripMarkdown(note.content).trim()
+                            const lines = text.split('\n').filter(l => l.trim())
+                            const preview = lines.slice(1).join(' ').trim() || (lines[0] ? '' : 'Empty note')
+                            return preview.slice(0, 60) + (preview.length > 60 ? '…' : '')
+                          })()}
+                        </span>
+                        {/* Restore button */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); restoreNote(note.id) }}
+                          className="absolute top-2.5 right-10 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer outline-none"
+                          style={{ color: 'var(--text-muted)' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
+                          title="Restore"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                            <path d="M3 3v5h5" />
+                          </svg>
+                        </button>
+                        {/* Delete permanently button */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteNote(note.id) }}
+                          className="absolute top-2.5 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer outline-none"
+                          style={{ color: 'var(--text-muted)' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = '#ef4444' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
+                          title="Delete permanently"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
 
         {/* Bottom actions */}
-        <div className="p-3 flex gap-2" style={{ borderTop: '1px solid var(--border)' }}>
-          <button
-            onClick={createNote}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 cursor-pointer outline-none"
-            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            New Note
-          </button>
-          <div className="relative self-stretch" ref={themeMenuRef}>
+        <div className="p-2 flex justify-start" style={{ borderTop: '1px solid var(--border)' }}>
+          <div className="relative" ref={themeMenuRef}>
             <button
               onClick={() => { setThemeMenuOpen(!themeMenuOpen); setThemeSearch('') }}
-              className="h-full flex items-center justify-center px-3 rounded-xl transition-all duration-200 cursor-pointer outline-none"
-              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+              className="p-1.5 rounded-lg transition-all duration-200 cursor-pointer outline-none"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
               title="Theme"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -545,7 +998,7 @@ function App() {
                 t.description.toLowerCase().includes(themeSearch.toLowerCase())
               )
               return (
-              <div className="absolute bottom-full right-0 mb-2 w-56 backdrop-blur-2xl rounded-xl p-2 shadow-2xl" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+              <div className="absolute bottom-full left-0 mb-2 w-56 backdrop-blur-2xl rounded-xl p-2 shadow-2xl" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.15em] px-2 py-1.5 mb-1" style={{ color: 'var(--text-muted)' }}>
                   Theme
                 </div>
@@ -673,30 +1126,7 @@ function App() {
                 placeholder="Start writing or paste your text here…"
               />
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-6">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-muted)' }}>
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="12" y1="18" x2="12" y2="12" />
-                  <line x1="9" y1="15" x2="15" y2="15" />
-                </svg>
-              </div>
-              <div className="text-center">
-                <p className="text-[15px] mb-4" style={{ color: 'var(--text-muted)' }}>No note selected</p>
-                <button
-                  onClick={createNote}
-                  className="px-5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 cursor-pointer outline-none"
-                  style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
-                >
-                  Create a new note
-                </button>
-              </div>
-            </div>
-          )}
+          ) : null}
         </main>
       </div>
 
